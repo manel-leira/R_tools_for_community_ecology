@@ -1,0 +1,2093 @@
+---
+title: "Análisis de comunidades para la gestión y conservación de ecosistemas acuáticos"
+subtitle: "Código para biólogos: Introducción a R"
+author: "Manel Leira"
+institute: "BiBiCI, Ecología, USC"
+date: "`r Sys.Date()`"
+output:
+  xaringan::moon_reader:
+    lib_dir: libs
+    css: [default, default-fonts, "custom.css"]
+    nature:
+      highlightStyle: github
+      highlightLines: true
+      countIncrementalSlides: false
+      ratio: "16:9"
+      slideNumberFormat: "%current% / %total%"
+      navigation:
+        scroll: false
+---
+```{r setup, include=FALSE}
+options(htmltools.dir.version = FALSE)
+
+# Usar Cairo para evitar errores de fuentes
+knitr::opts_chunk$set(
+  dev = "CairoPNG",             # <- esta es la clave
+  fig.width = 10,
+  fig.height = 5,
+  fig.retina = 3,
+  out.width = "100%",
+  cache = FALSE,
+  echo = TRUE,
+  comment = NA,
+  collapse = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  hiline = TRUE,
+  fig.align = "center"
+)
+
+# Cargar librerías
+library(Cairo)      # <- debe ir antes de usar 'CairoPNG'
+library(ggplot2)
+library(dplyr)
+library(vegan)
+library(viridis)
+library(kableExtra)
+library(gridExtra)
+library(reshape2)
+library(betapart)
+library(ade4)
+library(patchwork)
+library(zoo)
+
+# Configurar tema por defecto
+theme_set(theme_minimal(base_size = 12) + 
+          theme(plot.title = element_text(size = 14, face = "bold"),
+                plot.subtitle = element_text(size = 10)))
+
+# Configurar opciones de kable
+options(knitr.kable.NA = '')
+```
+
+```{css, echo=FALSE}
+.remark-code{line-height: 1.0; font-size: 80%}
+.large { font-size: 100% }
+.medium { font-size: 75% } 
+.small { font-size: 50% }
+.tiny { font-size: 25% }
+.huge { font-size: 125% }
+
+.pull-left-wide  { float:left;  width:60%; text-align:left; }
+.pull-right-narrow{ float:right; width:30%; text-align:left; }
+.pull-left-narrow { float: left; width: 30%;text-align:left; }
+.pull-right-wide { float: right; width: 65%;text-align:left; }
+
+.red { color: #DC143C; }
+.blue { color: #4169E1; }
+.green { color: #2E8B57; }
+.orange { color: #FF8C00; }
+
+.center-image { display: block; margin: 0 auto; }
+
+/* Estilo para código destacado */
+.remark-code-line-highlighted { background-color: rgba(255,255,0,0.2); }
+
+/* Estilo para bloques de alerta */
+.alert { 
+  background-color: #f8d7da; 
+  color: #721c24; 
+  padding: 10px; 
+  border-radius: 5px; 
+  border-left: 5px solid #f5c6cb;
+}
+
+.info { 
+  background-color: #d1ecf1; 
+  color: #0c5460; 
+  padding: 10px; 
+  border-radius: 5px; 
+  border-left: 5px solid #bee5eb;
+}
+
+.success { 
+  background-color: #d4edda; 
+  color: #155724; 
+  padding: 10px; 
+  border-radius: 5px; 
+  border-left: 5px solid #c3e6cb;
+}
+```
+---
+class: inverse, center, middle
+
+# Análisis de comunidades
+
+## para la gestión y conservación de ecosistemas acuáticos
+
+### .large[Código para biólogos: Introducción a R]
+
+#### `r Sys.Date()`
+
+---
+
+## Contenido de la presentación
+
+1. **¿Por qué analizar comunidades biológicas?**
+   - Marco normativo: DMA
+   - Comunidades como indicadores
+   - Respuesta al cambio global
+2. **Fundamentos conceptuales**
+   - Tipos de datos comunitarios
+   - Aproximaciones analíticas
+3. **Análisis de diversidad**
+   - Diversidad α, β, γ
+   - Diversidad funcional
+4. **Análisis de ordenación**
+   - PCA, CA, CCA/RDA
+   - Interpretación en R
+5. **Detección de cambios**
+   - Tipping points
+   - Early warning signals
+6. **Aplicaciones en gestión**
+   - Índices multimétricos
+   - Priorización para conservación
+
+---
+
+class: inverse, center, middle
+
+# ¿Por qué analizar comunidades biológicas?
+
+---
+
+## Marco normativo: La Directiva Marco del Agua
+
+.pull-left[
+### .blue[DMA 2000/60/CE]: "Buen estado ecológico" para 2027
+
+**Elementos de calidad biológica:**
+- .green[Flora acuática]: Fitoplancton, fitobentos, macrófitos
+- .green[Fauna bentónica]: Invertebrados bentónicos  
+- .green[Ictiofauna]: Composición, abundancia, estructura de edades
+
+**Enfoque ecosistémico:** De especies a comunidades
+
+**Integración:** Biológicos + fisicoquímicos + hidromorfológicos
+]
+
+.pull-right[
+```{r dma-elements, echo=FALSE, fig.height=6}
+# Crear gráfico de elementos DMA
+library(ggplot2)
+
+dma_data <- data.frame(
+  Elemento = c("Flora\nacuática", "Fauna\nbentónica", "Ictiofauna", 
+               "Fisicoquímica", "Hidromorfología"),
+  Tipo = c("Biológico", "Biológico", "Biológico", "Químico", "Físico"),
+  Importancia = c(0.9, 0.95, 0.8, 0.7, 0.6),
+  Prioridade = c("Alta", "Muy alta", "Alta", "Media", "Media")
+)
+
+ggplot(dma_data, aes(x = reorder(Elemento, Importancia), 
+                     y = Importancia, fill = Tipo)) +
+  geom_col(alpha = 0.8, width = 0.7) +
+  coord_flip() +
+  scale_fill_manual(values = c("Biológico" = "#2E8B57", 
+                               "Químico" = "#4169E1", 
+                               "Físico" = "#B8860B")) +
+  labs(x = "", y = "Relevancia en la evaluación DMA", 
+       fill = "Tipo de elemento",
+       title = "Elementos de calidad según DMA",
+       subtitle = "Prioridad de los elementos biológicos") +
+  theme_minimal(base_size = 12, base_family = "sans") +  # <- cambio clave
+  theme(legend.position = "bottom",
+        axis.text.y = element_text(size = 10))
+```
+.info[
+**Objetivo**: Alcanzar el "buen estado ecológico" mediante una evaluación integrada de múltiples elementos de calidad
+]
+]
+
+---
+
+## Las comunidades como indicadores del estado ecosistémico
+
+
+### ¿Por qué las comunidades?
+
+.huge[
+- **Integran múltiples estreses**: Respuesta a factores físicos, químicos y biológicos
+- **Diferentes escalas temporales**: Desde respuesta inmediata hasta cambios a largo plazo  
+- **Funcionalidad ecosistémica**: Relación directa estructura-función
+- **Sensibilidad gradual**: Detectan cambios antes que variables fisicoquímicas
+]
+---
+## Las comunidades como indicadores del estado ecosistémico
+
+.pull-left-narrow[
+.success[
+**Ejemplo: Diatomeas**
+- Respuesta rápida a cambios fisicoquímicos (días-semanas)
+- Ciclo de vida corto (~2-4 semanas)  
+- Amplia tolerancia ecológica (oligotrofia → hipertrofia)
+- Fácil identificación taxonómica y preservación
+- Índices estandarizados (IPS, TDI, EPI-D)
+]
+]
+.pull-right-wide[
+```{r diatomeas-ejemplo, echo=FALSE, fig.height=6}
+# Simular gradiente de diatomeas con datos más realistas
+set.seed(123)
+nutrientes <- seq(0.05, 3, length.out = 25)
+
+# Especies con óptimos ecológicos reales
+especies_data <- data.frame(
+  Nutrientes = rep(nutrientes, 4),
+  Especie = rep(c("Achnanthidium\nminutissimum", "Cocconeis\nplacentula", 
+                  "Nitzschia palea", "Cyclotella\nmeneghiniana"), 
+                each = 25),
+  Optimo = rep(c(0.2, 0.8, 1.8, 2.5), each = 25),
+  Tolerancia = rep(c(0.3, 0.5, 0.8, 0.6), each = 25)
+)
+
+# Calcular abundancias con respuesta gaussiana más realista
+especies_data$Abundancia <- with(especies_data, {
+  100 * exp(-0.5 * ((Nutrientes - Optimo) / Tolerancia)^2) + 
+    rnorm(nrow(especies_data), 0, 3)
+})
+especies_data$Abundancia[especies_data$Abundancia < 0] <- 0
+
+ggplot(especies_data, aes(x = Nutrientes, y = Abundancia, color = Especie)) +
+  geom_line(size = 1.2, alpha = 0.8) +
+  geom_point(size = 1.5, alpha = 0.6) +
+  scale_color_manual(values = c("#1f77b4", "#ff7f0e", "#2ca02c", "#d62728")) +
+  labs(x = "Fósforo total (mg P/L)", y = "Abundancia relativa (%)",
+       title = "Distribución de diatomeas",
+       subtitle = "Gradiente de nutrientes",
+       color = "Especies") +
+  theme_minimal(base_size = 10) +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size = 8, face = "italic"),
+        axis.text = element_text(size = 8))
+```
+]
+
+---
+
+## Respuesta de las comunidades al cambio global
+
+.pull-left[
+### Dos tipos de respuesta:
+1. **.blue[Gradual y lineal]**
+   - Cambios progresivos en la composición
+   - Respuesta proporcional al estrés
+   - Predecible y reversible
+   - Gestión convencional efectiva
+2. **.red[Abrupta y no lineal]**
+   - Cambios súbitos de estado
+   - **Tipping points** o puntos críticos
+   - Dificultad de reversión (histéresis)
+   - Necesidad de gestión preventiva
+]
+.pull-right[
+```{r respuesta-tipos, echo=FALSE, fig.height=7}
+# Crear datos para respuesta lineal vs no lineal más realistas
+set.seed(456)
+stress <- seq(0, 10, length.out = 100)
+
+# Respuesta gradual con ruido realista
+gradual <- data.frame(
+  Stress = stress,
+  Estado = 100 - 8 * stress + rnorm(100, 0, 4),
+  Tipo = "Respuesta gradual"
+)
+
+# Respuesta abrupta con tipping point más marcado
+abrupta <- data.frame(
+  Stress = stress, 
+  Estado = ifelse(stress < 6.5, 
+                 95 - 2 * stress + rnorm(100, 0, 5),
+                 20 - 0.5 * stress + rnorm(100, 0, 4)),
+  Tipo = "Respuesta abrupta\n(tipping point)"
+)
+
+respuesta_data <- rbind(gradual, abrupta)
+
+ggplot(respuesta_data, aes(x = Stress, y = Estado, color = Tipo)) +
+  geom_point(alpha = 0.6, size = 1.5) +
+  geom_smooth(method = "loess", se = TRUE, size = 1.5, alpha = 0.3) +
+  scale_color_manual(values = c("Respuesta gradual" = "#2E8B57",
+                               "Respuesta abrupta\n(tipping point)" = "#DC143C")) +
+  geom_vline(xintercept = 6.5, color = "#DC143C", linetype = "dashed", 
+             alpha = 0.7, size = 1) +
+  annotate("text", x = 7, y = 85, label = "Tipping\npoint", 
+           color = "#DC143C", size = 3, fontface = "bold") +
+  labs(x = "Intensidad estrés ambiental",
+       y = "Estado comunidad (índice)",
+       title = "Dos tipos de respuesta comunidades",
+       subtitle = "Cambio ambiental → Respuesta comunidad",
+       color = "Tipo de respuesta") +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom")
+```
+.info[
+**Implicaciones para la gestión**: La detección temprana de cambios críticos → Gestión adaptativa y preventiva
+]
+]
+
+---
+
+## Conceptos clave: Resiliencia y puntos críticos
+
+.pull-left[
+#### .blue[Resiliencia]: Capacidad de un ecosistema para:
+- **Resistir** perturbaciones (*resistance*)
+- **Recuperarse** tras perturbación (*recovery*)  
+- **Adaptarse** a nuevos contextos (*adaptability*)
+#### .red[Tipping points]:
+- Umbrales críticos en el funcionamento
+- Cambios de régimen alternativos  
+- Estados estables múltiples
+#### .orange[Early warning signals]:
+- Aumento de la variabilidad
+- Correlación espacial creciente
+- "Critical slowing down"
+- Cambios en la distribución de frecuencias
+]
+.pull-right[
+```{r tipping-conceptual, echo=FALSE, fig.height=9}
+# Crear modelo conceptual de tipping point
+x <- seq(-3, 3, length.out = 100)
+y1 <- x^3 - x  # Superficie de potencial
+y2 <- -(x^3 - x)  
+
+# Estados del sistema
+ball_data <- data.frame(
+  x = c(-1.5, 0, 1.5),
+  y = c(-2, 0, 2),
+  state = c("Estado\noligotrófico", "Punto\ncrítico", "Estado\neutrófico"),
+  stability = c("Estable", "Inestable", "Estable")
+)
+
+ggplot() +
+  # Superficie de estabilidad
+  geom_line(data = data.frame(x = x, y = y1), aes(x, y), 
+            color = "#4169E1", size = 2, alpha = 0.8) +
+  geom_line(data = data.frame(x = x, y = y2), aes(x, y), 
+            color = "#DC143C", size = 2, alpha = 0.8) +
+  # Puntos de equilibrio
+  geom_point(data = ball_data[ball_data$stability == "Estable",], 
+             aes(x, y), size = 8, color = "#2E8B57", alpha = 0.8) +
+  geom_point(data = ball_data[ball_data$stability == "Inestable",], 
+             aes(x, y), size = 8, color = "#FF8C00", alpha = 0.8) +
+  # Etiquetas
+  geom_text(data = ball_data, aes(x, y + 0.7, label = state), 
+            size = 5, fontface = "bold", hjust = 0.5) +
+  # Flechas indicando estabilidad
+  annotate("segment", x = -2.5, y = -1.8, xend = -2, yend = -2.2, 
+           arrow = arrow(length = unit(0.3, "cm")), size = 1.2, color = "#4169E1") +
+  annotate("segment", x = 2.5, y = 1.8, xend = 2, yend = 2.2, 
+           arrow = arrow(length = unit(0.3, "cm")), size = 1.2, color = "#DC143C") +
+  labs(x = "Presión ambiental (eutrofización)",
+       y = "Estado do ecosistema",
+       title = "Modelo conceptual de tipping point",
+       subtitle = "Cambios de régimen entre estados alternativos estables") +
+  xlim(-3, 3) + ylim(-3, 3) +
+  theme_minimal(base_size = 16) +
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        panel.grid = element_blank())
+```
+]
+---
+
+class: inverse, center, middle
+
+# Fundamentos conceptuales
+
+---
+
+## Del dato taxonómico al conocimiento ecológico aplicado
+
+```{r workflow-diagram-parametrizado, echo=FALSE, fig.height=2}
+# ---- Parámetros editables ----
+box_width      <- 2.5     # ancho total de cada caja (eje X)
+box_height     <- 0.8     # alto total de cada caja (eje Y)
+text_size      <- 3.8     # tamaño del texto de las cajas
+arrow_head_cm  <- 0.35    # tamaño de la cabeza de flecha (cm)
+arrow_thickness<- 1.2     # grosor de la flecha (línea)
+arrow_gap      <- 0.2     # separación entre caja y comienzo/fin de flecha
+y_level        <- 2       # altura (Y) a la que van las cajas
+x_start        <- -3      # posición X de la primera caja
+x_step         <- 3.5      # separación entre centros de cajas consecutivas
+
+# ---- Librerías ----
+library(ggplot2)
+library(grid)  # para unit()
+
+# ---- Datos ----
+flow_data <- data.frame(
+  Step = 1:5,
+  Process = c("Datos\ntaxonómicos", "Matriz de\ncomunidades", 
+              "Análisis\nmultivariado", "Patrones\necológicos", 
+              "Recomendación\nde gestión"),
+  x = x_start + (0:4) * x_step,
+  y = y_level,
+  Type = c("Input", "Processing", "Analysis", "Results", "Output")
+)
+
+# Rectángulos a partir de ancho/alto
+flow_data$xmin <- flow_data$x - box_width/2
+flow_data$xmax <- flow_data$x + box_width/2
+flow_data$ymin <- flow_data$y - box_height/2
+flow_data$ymax <- flow_data$y + box_height/2
+
+# Flechas entre cajas: desde borde derecho de una caja al borde izquierdo de la siguiente
+arrows_data <- data.frame(
+  x    = head(flow_data$xmax, -1) + arrow_gap,
+  xend = tail(flow_data$xmin, -1) - arrow_gap,
+  y    = y_level,
+  yend = y_level
+)
+
+# ---- Gráfico ----
+ggplot() +
+  # Cajas
+  geom_rect(
+    data = flow_data,
+    aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = Type),
+    alpha = 0.7, color = "black", size = 0.8
+  ) +
+  # Texto
+  geom_text(
+    data = flow_data,
+    aes(x = x, y = y, label = Process),
+    size = text_size, fontface = "bold"
+  ) +
+  # Flechas
+  geom_segment(
+    data = arrows_data,
+    aes(x = x, y = y, xend = xend, yend = yend),
+    arrow = arrow(length = unit(arrow_head_cm, "cm"), type = "closed"),
+    size = arrow_thickness, color = "gray40", lineend = "round"
+  ) +
+  scale_fill_manual(values = c(
+    "Input" = "#e8f4fd", "Processing" = "#b3d9ff",
+    "Analysis" = "#66b3ff", "Results" = "#1a8cff",
+    "Output" = "#0066cc"
+  )) +
+  labs(
+    title = "Proceso integrado de análisis de comunidades"
+  ) +
+  theme_void() +
+  theme(
+    legend.position = "none",
+    plot.title = element_text(hjust = 0.5, size = 16, face = "bold")
+  ) +
+  coord_fixed(ratio = 1) +
+  # Límites calculados automáticamente para encajar todo
+  expand_limits(
+    x = c(min(flow_data$xmin) - 0.2, max(flow_data$xmax) + 0.2),
+    y = c(y_level - box_height,      y_level + box_height)
+  )
+```
+
+### .success[Ejemplos de aplicación en la DMA]
+- **Índices multimétricos**: EQR (Ecological Quality Ratio)  
+- **Sistemas de clasificación**: Índice IPS para diatomeas, IBMWP para macroinvertebrados
+- **Programas de seguimiento**: Redes de monitoreo de calidad del agua
+]
+---
+
+## Estructura de datos comunitarios
+
+.pull-left[
+.medium[### Matriz especies × sitios]
+```{r matriz-ejemplo, echo=TRUE}
+# Cargar datos de ejemplo
+library(vegan)
+data(dune)
+
+# Mostrar estructura
+dim(dune)
+dune[1:6, 1:8] %>%
+  kable(format = "html", caption = "Abundancias de especies") %>%
+  kable_styling(bootstrap_options = c("striped", "condensed"), 
+                font_size = 10, full_width = FALSE)
+```
+]
+
+.pull-right[
+.medium[### Variables ambientales asociadas]
+```{r variables-amb, echo=TRUE}
+data(dune.env)
+dune.env[1:6,] %>%
+  kable(format = "html", caption = "Variables de hábitat") %>%
+  kable_styling(bootstrap_options = c("striped", "condensed"), 
+                font_size = 10, full_width = FALSE)
+```
+]
+
+---
+### Principales aproximaciones analíticas
+
+1. **.blue[Análisis de diversidad]**
+   - α, β, γ diversidad
+   - Números de Hill  
+   - Diversidad funcional
+
+2. **.green[Análisis de ordenación]**  
+   - PCA, CA, DCA (ordenación indirecta)
+   - CCA, RDA (ordenación directa)
+
+3. **.orange[Análisis de clasificación]**
+   - Cluster analysis jerárquico
+   - SIMPROF, PERMANOVA
+
+4. **.red[Modelos predictivos]**
+   - GLM, GAM
+   - Random forests, Machine learning
+
+---
+class: left, middle
+
+## R como herramienta integradora para el análisis de comunidades
+
+
+### ¿Por qué R para análisis de comunidades?
+
+- **.blue[Especialización]**: Paquetes específicos desarrollados por ecólogos
+- **.green[Reproducibilidad]**: Código + datos = resultados verificables  
+- **.orange[Flexibilidad]**: Desde análisis básico hasta modelos complejos
+- **.red[Comunidad]**: Amplio soporte y documentación
+- **Integración**: Datos → análisis → visualización → comunicación
+
+.info[
+**R como herramienta integradora**: Desde la carga de datos hasta la interpretación ecológica y aplicación a la gestión
+]
+---
+## Paquetes esenciales
+.pull-left[
+
+```{r paquetes, echo=TRUE, eval=FALSE}
+# Análisis de comunidades
+library(vegan)    # El más completo
+library(ade4)     # Métodos franceses
+library(BiodiversityR) # Interfaz gráfica
+
+# Diversidade especializada  
+library(betapart) # Beta diversidad
+library(FD)       # Diversidad funcional
+
+# Visualización avanzada
+library(ggplot2)  # Gráficos elegantes
+library(ggvegan)  # ggplot para vegan
+```
+
+<br><br><br><br><br><br><br><br>
+
+.large[**Resultado**: Mayor humedad → mayor diversidad (r = `r round(cor(diversity(dune), as.numeric(dune.env$Moisture)), 3)`)]
+]
+
+.pull-right[
+```{r ejemplo-resultado, echo=TRUE, fig.height=3.5}
+# Ejemplo de análisis integrado en R
+library(vegan)
+data(dune, dune.env)
+
+# 1. Calcular diversidad
+shannon <- diversity(dune)
+
+# 2. Ordenación  
+pca <- rda(dune)
+
+# 3. Relacionar con ambiente
+cor_result <- cor(shannon, 
+                  as.numeric(dune.env$Moisture))
+# 4. Visualizar resultado
+plot(as.numeric(dune.env$Moisture), shannon,
+     xlab = "Humedad (1=seco, 5=húmido)", 
+     ylab = "Diversidad Shannon",
+     main = paste("r =", round(cor_result, 3)),
+     pch = 19, col = "steelblue", cex = 1.5)
+abline(lm(shannon ~ as.numeric(dune.env$Moisture)), 
+       col = "red", lwd = 2)
+```
+
+
+]
+
+---
+
+class: inverse, center, middle
+
+# Análisis de diversidad
+
+## Más allá de contar especies
+
+---
+
+## Diversidad alfa: Caracterización local
+
+.pull-left[
+### Índices clásicos
+
+```{r diversidade-alfa, echo=TRUE}
+# Cálculo de índices de diversidad
+library(vegan)
+data(dune)
+
+# Índices básicos
+shannon <- diversity(dune, index = "shannon")
+simpson <- diversity(dune, index = "simpson") 
+riqueza <- specnumber(dune)
+
+# Pielou's evenness
+evenness <- shannon / log(riqueza)
+
+# Crear resumen
+div_summary <- data.frame(
+  Sitio = 1:nrow(dune),
+  Shannon = round(shannon, 2),
+  Simpson = round(simpson, 2),
+  Riqueza = riqueza,
+  Evenness = round(evenness, 2)
+)
+
+head(div_summary)
+```
+
+]
+
+.pull-right[
+
+### Números de Hill (recomendados)
+```{r hill-numbers, echo=TRUE}
+# Números de Hill: q0, q1, q2
+q0 <- specnumber(dune)        # Riqueza
+q1 <- exp(shannon)            # Shannon efectivo  
+q2 <- 1/(1-simpson)           # Simpson efectivo
+
+head(data.frame(q0, q1, q2))
+```
+]
+
+---
+
+## Diversidad alfa: Caracterización local
+
+.pull-left[
+```{r plot-diversidade, echo=FALSE, fig.height=8}
+# Gráfico de diversidad
+div_long <- reshape2::melt(div_summary[,1:4], 
+                          id.vars = "Sitio", 
+                          variable.name = "Indice", 
+                          value.name = "Valor")
+
+p1 <- ggplot(div_long, aes(x = Sitio, y = Valor, color = Indice)) +
+  geom_point(size = 2, alpha = 0.8) +
+  geom_line(alpha = 0.6) +
+  facet_wrap(~Indice, scales = "free_y", ncol = 2) +
+  scale_color_viridis_d() +
+  labs(x = "Sitio", y = "Valor del índice",
+       title = "Índices de diversidad alfa",
+       subtitle = "Variación entre sitios") +
+  theme_minimal(base_size = 16) +
+  theme(legend.position = "none",
+        strip.text = element_text(face = "bold"))
+
+p1
+```
+]
+
+.pull-right[
+
+<br><br><br><br>
+.huge[
+<br>
+**.blue[Shannon]**: Entropía, sensible a especies raras  
+<br>
+**.green[Simpson]**: Dominancia, sensible a especies abundantes  
+<br>
+**.orange[Riqueza]**: Número total de especies  
+<br>
+**.red[Evenness]**: Equitabilidad de la distribución
+]
+]
+---
+
+## Diversidad beta: Cambio espacial
+
+.pull-left[
+### Partición de la diversidad beta
+
+```{r diversidade-beta, echo=TRUE}
+# Análisis de diversidad beta
+library(vegan)
+library(betapart)
+
+# Dato de ejemplo
+data(dune)
+
+# Presencia/ausencia
+dune_pa <- decostand(dune, method = "pa")
+
+# Multisite (Sorensen)
+beta_multi <- beta.multi(dune_pa, index.family = "sorensen")
+print(beta_multi)
+
+# Pares (Sorensen) → sim + nes = sor
+beta_pair <- beta.pair(dune_pa, index.family = "sorensen")
+
+# Matriz de disimilitud total (Sorensen)
+beta_total <- as.matrix(beta_pair$beta.sor)
+
+dim(beta_total)
+```
+]
+
+.pull-right[
+### Interpretación ecológica
+.huge[
+- **.blue[βjac]**: Disimilaridad total de Jaccard
+- **.green[βsim]**: Recambio de especies (*turnover*)  
+- **.orange[βnes]**: Anidamiento (*nestedness*)
+
+    **βjac = βsim + βnes**
+]
+]
+
+---
+
+## Diversidad beta: Patrones de cambio espacial
+
+```{r beta-plot, echo=FALSE, fig.height=4, fig.width=12, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(patchwork)
+
+# Data frame para los mapas de calor
+n <- nrow(beta_total)
+beta_df <- expand.grid(Site1 = seq_len(n), Site2 = seq_len(n))
+beta_df$Beta_sor <- as.vector(as.matrix(beta_total))
+beta_df$Beta_sim <- as.vector(as.matrix(beta_pair$beta.sim))
+beta_df$Beta_sne <- as.vector(as.matrix(beta_pair$beta.sne))
+
+p1 <- ggplot(beta_df, aes(Site1, Site2, fill = Beta_sor)) +
+  geom_tile() +
+  scale_fill_viridis_c(name = "βsor") +
+  labs(x = "Sitio", y = "Sitio", title = "Beta total (Sørensen)") +
+  theme_minimal(base_size = 10) +
+  theme(axis.text = element_text(size = 8))
+
+p2 <- ggplot(beta_df, aes(Site1, Site2, fill = Beta_sim)) +
+  geom_tile() +
+  scale_fill_viridis_c(name = "βsim", option = "plasma") +
+  labs(x = "Sitio", y = "Sitio", title = "Recambio (turnover)") +
+  theme_minimal(base_size = 10) +
+  theme(axis.text = element_text(size = 8))
+
+p3 <- ggplot(beta_df, aes(Site1, Site2, fill = Beta_sne)) +
+  geom_tile() +
+  scale_fill_viridis_c(name = "βsne", option = "magma") +
+  labs(x = "Sitio", y = "Sitio", title = "Anidamiento (nestedness)") +
+  theme_minimal(base_size = 10) +
+  theme(axis.text = element_text(size = 8))
+
+# Disposición en columnas (lado a lado)
+print(p1 | p2 | p3)
+
+```
+
+---
+class: left, middle
+
+# Diversidad funcional: Más allá de la taxonomía
+
+## Conceptos clave
+
+.huge[
+- **Rasgos funcionales**: Características morfológicas, fisiológicas o fenológicas
+- **Grupos funcionales**: Especies con roles ecológicos similares  
+- **Redundancia funcional**: Múltiples especies cumplen misma función
+- **Singularidad funcional**: Especies con funciones únicas
+]
+---
+
+## Diversidad funcional: Ejemplo
+
+.pull-left[
+
+```{r diversidad-funcional, echo=TRUE}
+# Ejemplo con datos simulados
+set.seed(123)
+n_species <- 20
+n_sites <- 10
+
+# Simular comunidad
+community <- matrix(rpois(n_species * n_sites, 5), 
+                   nrow = n_sites, 
+                   ncol = n_species)
+colnames(community) <- paste0("Sp", 1:n_species)
+
+# Simular rasgos funcionales
+traits <- data.frame(
+  Size = rnorm(n_species, 10, 3),
+  Mobility = sample(1:5, n_species, replace = TRUE),
+  Feeding = sample(c("Filter", "Predator", "Scraper"), 
+                   n_species, replace = TRUE)
+)
+rownames(traits) <- colnames(community)
+
+# Calcular diversidad funcional
+library(FD)
+fd_result <- dbFD(traits, community, 
+                  calc.FRic = FALSE)
+head(fd_result$FDis)  # Dispersión funcional
+```
+]
+
+.pull-right[
+```{r fd-plot, echo=FALSE, fig.height=6}
+# Visualizar diversidad funcional
+fd_data <- data.frame(
+  Site = 1:n_sites,
+  FDis = fd_result$FDis,
+  FEve = fd_result$FEve,
+  Shannon = diversity(community)
+)
+
+# Correlación taxonomica vs funcional
+cor_tf <- cor(fd_data$Shannon, fd_data$FDis)
+
+p1 <- ggplot(fd_data, aes(x = Shannon, y = FDis)) +
+  geom_point(size = 3, color = "steelblue", alpha = 0.8) +
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  labs(x = "Diversidade taxonómica (Shannon)", 
+       y = "Diversidade funcional (FDis)",
+       title = "Relación taxonomía vs función",
+       subtitle = paste("r =", round(cor_tf, 3))) +
+  theme_minimal(base_size = 12)
+
+p2 <- ggplot(fd_data, aes(x = Site)) +
+  geom_line(aes(y = scale(Shannon)[,1], color = "Shannon"), size = 1.2) +
+  geom_line(aes(y = scale(FDis)[,1], color = "FDis"), size = 1.2) +
+  geom_point(aes(y = scale(Shannon)[,1], color = "Shannon"), size = 2) +
+  geom_point(aes(y = scale(FDis)[,1], color = "FDis"), size = 2) +
+  scale_color_manual(values = c("Shannon" = "#2E8B57", "FDis" = "#DC143C")) +
+  labs(x = "Sitio", y = "Diversidad (estandarizada)",
+       title = "Comparación de diversidades",
+       color = "Tipo") +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom")
+
+p1 / p2
+```
+
+**Interpretación**: Diversidad funcional puede diferir de la taxonómica, revelando patrones ecológicos complementarios
+
+]
+
+---
+
+class: inverse, center, middle
+
+# Análisis de ordenación
+
+## Visualizar patrones comunitarios
+
+---
+
+## PCA: Análisis exploratorio inicial
+
+.pull-left[
+
+```{r pca-codigo, echo=TRUE}
+# PCA de las comunidades
+library(vegan)
+data(dune)
+
+# Transformación (recomendada)
+dune_hell <- decostand(dune, "hellinger")
+
+# PCA
+pca_result <- rda(dune_hell)
+
+# Resumo de la varianza explicada
+summary(pca_result)$cont$importance[1:2, 1:4]
+```
+
+```{r pca-interpretacion, echo=TRUE}
+# Especies más importantes en PC1 e PC2
+spp_scores <- scores(pca_result, display = "species")
+pc1_important <- names(sort(abs(spp_scores[,1]), 
+                           decreasing = TRUE)[1:5])
+pc2_important <- names(sort(abs(spp_scores[,2]), 
+                           decreasing = TRUE)[1:5])
+
+cat("PC1 importantes:", pc1_important, "\n")
+cat("PC2 importantes:", pc2_important, "\n")
+```
+]
+
+.pull-right[
+```{r pca-plot, echo=FALSE, fig.height=7}
+# Crear biplot elegante
+library(vegan)
+
+# Obtener scores
+site_scores <- scores(pca_result, display = "sites")
+species_scores <- scores(pca_result, display = "species")
+
+# Crear dataframe para sites
+sites_df <- data.frame(
+  PC1 = site_scores[,1],
+  PC2 = site_scores[,2],
+  Site = 1:nrow(site_scores)
+)
+
+# Crear dataframe para especies (solo las más importantes)
+species_df <- data.frame(
+  PC1 = species_scores[,1],
+  PC2 = species_scores[,2],
+  Species = rownames(species_scores)
+)
+
+# Filtrar especies más extremas
+species_df$distance <- sqrt(species_df$PC1^2 + species_df$PC2^2)
+species_important <- species_df[species_df$distance > quantile(species_df$distance, 0.7),]
+
+# Crear biplot
+ggplot() +
+  # Sitios
+  geom_point(data = sites_df, aes(x = PC1, y = PC2), 
+             size = 3, color = "steelblue", alpha = 0.8) +
+  geom_text(data = sites_df, aes(x = PC1, y = PC2, label = Site), 
+            vjust = -1, size = 5) +
+  # Especies importantes
+  geom_segment(data = species_important, 
+               aes(x = 0, y = 0, xend = PC1*3, yend = PC2*3),
+               arrow = arrow(length = unit(0.2, "cm")), 
+               color = "red", alpha = 0.7) +
+  geom_text(data = species_important, 
+            aes(x = PC1*3.2, y = PC2*3.2, label = Species), 
+            size = 5, color = "red", fontface = "italic") +
+  # Configuración
+  labs(x = paste0("PC1 (", round(summary(pca_result)$cont$importance[2,1]*100, 1), "%)"),
+       y = paste0("PC2 (", round(summary(pca_result)$cont$importance[2,2]*100, 1), "%)"),
+       title = "PCA - Análisis de comunidades",
+       subtitle = "Ordenación indirecta (transformación Hellinger)") +
+  theme_minimal(base_size = 16) +
+  theme(panel.grid.minor = element_blank())
+```
+
+**Interpretación**: PC1 (`r round(summary(rda(decostand(dune, "hellinger")))$cont$importance[2,1]*100, 1)`%) separa sitios por composición xeral, PC2 (`r round(summary(rda(decostand(dune, "hellinger")))$cont$importance[2,2]*100, 1)`%) por especies específicas
+]
+
+---
+
+## CCA: Relacionar comunidades con ambiente
+
+.pull-left[
+
+```{r cca-analise, echo=TRUE}
+# CCA con variables ambientales
+data(dune.env)
+
+# Modelo completo
+cca_full <- cca(dune ~ ., data = dune.env)
+
+# Selección de variables (step-wise)
+cca_selected <- ordistep(cca(dune ~ 1, dune.env), 
+                        scope = formula(cca_full),
+                        trace = FALSE)
+# Modelo final
+cca_selected$call
+
+# Tests de significancia
+anova(cca_selected, permutations = 999)
+```
+
+```{r cca-variance, echo=TRUE}
+# Varianza explicada
+RsquareAdj(cca_selected)
+```
+]
+
+.pull-right[
+```{r cca-plot, echo=FALSE, fig.height=7}
+# Biplot CCA elegante
+# Obtener scores
+site_scores_cca <- scores(cca_selected, display = "sites")
+species_scores_cca <- scores(cca_selected, display = "species") 
+env_scores <- scores(cca_selected, display = "bp")
+
+# Dataframes
+sites_cca_df <- data.frame(
+  CCA1 = site_scores_cca[,1],
+  CCA2 = site_scores_cca[,2],
+  Site = 1:nrow(site_scores_cca)
+)
+
+species_cca_df <- data.frame(
+  CCA1 = species_scores_cca[,1],
+  CCA2 = species_scores_cca[,2],
+  Species = rownames(species_scores_cca)
+)
+
+env_df <- data.frame(
+  CCA1 = env_scores[,1],
+  CCA2 = env_scores[,2],
+  Variable = rownames(env_scores)
+)
+
+# Filtrar especies más representativas
+species_cca_df$distance <- sqrt(species_cca_df$CCA1^2 + species_cca_df$CCA2^2)
+species_cca_important <- species_cca_df[species_cca_df$distance > quantile(species_cca_df$distance, 0.6),]
+
+# Biplot CCA
+ggplot() +
+  # Sitios
+  geom_point(data = sites_cca_df, aes(x = CCA1, y = CCA2), 
+             size = 3, color = "steelblue", alpha = 0.8) +
+  geom_text(data = sites_cca_df, aes(x = CCA1, y = CCA2, label = Site), 
+            vjust = -1, size = 5) +
+  # Variables ambientais
+  geom_segment(data = env_df, 
+               aes(x = 0, y = 0, xend = CCA1*2, yend = CCA2*2),
+               arrow = arrow(length = unit(0.3, "cm")), 
+               color = "darkgreen", size = 1.2) +
+  geom_text(data = env_df, 
+            aes(x = CCA1*2.2, y = CCA2*2.2, label = Variable), 
+            size = 5, color = "darkgreen", fontface = "bold") +
+  # Especies importantes
+  geom_point(data = species_cca_important, aes(x = CCA1, y = CCA2), 
+             size = 1, color = "red", alpha = 0.6) +
+  geom_text(data = species_cca_important, 
+            aes(x = CCA1, y = CCA2, label = Species), 
+            size = 3, color = "red", fontface = "italic", 
+            nudge_y = 0.1) +
+  labs(x = "CCA1", y = "CCA2",
+       title = "CCA - Relación comunidades-ambiente",
+       subtitle = paste("Varianza explicada:", 
+                       round(RsquareAdj(cca_selected)$adj.r.squared*100, 1), "%")) +
+  theme_minimal(base_size = 16) +
+  theme(panel.grid.minor = element_blank())
+```
+
+1. **.blue[Distancia entre sitios]** = similitud comunitaria
+2. **.green[Longitud de vectores ambientales]** = importancia de la variable  
+3. **.orange[Ángulo entre vectores]** = correlación entre variables
+4. **.red[Proximidad sitio-vector]** = asociación sitio-variable
+]
+
+---
+
+.pull-left[
+
+### Diagnósticos importantes
+
+```{r diagnosticos, echo=TRUE}
+# Eigenvalues (autovalores)
+eigenvals(cca_selected)[1:4]
+
+# Gradient length (CA para comprobar)
+ca_dune <- cca(dune)
+summary(ca_dune)$spec[1:2, 1:4]
+```
+
+**Gradient length < 2**: Métodos lineales (PCA, RDA)  
+**Gradient length > 3**: Métodos unimodales (CA, CCA)
+]
+
+.pull-right[
+
+### Especies indicadoras
+
+```{r especies-indicadoras, echo=TRUE}
+# Análisis de especies indicadoras
+library(indicspecies)
+
+# Definir grupos basados en CCA1
+groups <- ifelse(site_scores_cca[,1] > 0, "Positive", "Negative")
+
+# Análisis de indicadores
+indval_result <- multipatt(dune, groups, 
+                          control = how(nperm=999))
+
+# Especies significativas
+summary(indval_result, indvalcomp = TRUE)
+```
+
+.info[
+**Aplicación práctica**: Identificar especies diagnóstico para clasificación de hábitats o evaluación de la calidad
+]
+]
+
+---
+
+class: inverse, center, middle
+
+# Detección de cambios y tipping points
+
+---
+
+## Detectar cambios antes de que ocurran
+
+.pull-left[
+### Señales de alerta temprana
+
+1. **Aumento de la variabilidad**
+2. **Correlación espacial creciente**  
+3. **"Critical slowing down"**
+4. **Cambios en la autocorrelación temporal**
+5. **Asimetría en la distribución**
+
+```{r early-warning-sim, echo=TRUE}
+# Simular serie temporal próxima a tipping point
+set.seed(789)
+n <- 200
+time <- 1:n
+
+# Variabilidad y autocorrelación crecientes
+variance <- 1 + 0.02 * time
+autocorr <- 0.1 + 0.003 * time
+
+# Serie temporal
+ts_sim <- numeric(n)
+ts_sim[1] <- rnorm(1, 50, 5)
+for(i in 2:n) {
+  trend <- ifelse(i < 150, 50 - 0.03*i, 
+                  15 - 0.05*i)
+  ts_sim[i] <- autocorr[i] * ts_sim[i-1] + 
+    (1 - autocorr[i]) * trend + 
+    rnorm(1, 0, sqrt(variance[i]))
+}
+```
+]
+
+.pull-right[
+```{r early-warning-plot, echo=FALSE, fig.height=9}
+# Calcular indicadores móviles
+library(zoo)
+window_size <- 20
+
+ts_data <- data.frame(
+  Time = time,
+  Value = ts_sim,
+  Variance = NA,
+  Autocorr = NA,
+  Skewness = NA
+)
+
+# Calcular ventanas móviles
+for(i in window_size:n) {
+  window_data <- ts_sim[(i-window_size+1):i]
+  ts_data$Variance[i] <- var(window_data)
+  if(length(window_data) > 1) {
+    ts_data$Autocorr[i] <- cor(window_data[-1], window_data[-length(window_data)])
+  }
+  # Skewness simple
+  ts_data$Skewness[i] <- mean((window_data - mean(window_data))^3) / (sd(window_data)^3)
+}
+
+# Gráficos
+p1 <- ggplot(ts_data, aes(x = Time, y = Value)) +
+  geom_line(color = "steelblue", size = 1) +
+  geom_vline(xintercept = 150, color = "red", linetype = "dashed", size = 1) +
+  annotate("text", x = 170, y = max(ts_data$Value, na.rm = TRUE), 
+           label = "Tipping point", color = "red", size = 5) +
+  labs(y = "Estado comunidad", title = "Serie temporal") +
+  theme_minimal(base_size = 12)
+
+p2 <- ggplot(ts_data, aes(x = Time, y = Variance)) +
+  geom_line(color = "orange", size = 1) +
+  geom_vline(xintercept = 150, color = "red", linetype = "dashed", size = 1) +
+  labs(y = "Variabilidad", title = "↑ Variabilidad") +
+  theme_minimal(base_size = 12)
+
+p3 <- ggplot(ts_data, aes(x = Time, y = Autocorr)) +
+  geom_line(color = "darkgreen", size = 1) +
+  geom_vline(xintercept = 150, color = "red", linetype = "dashed", size = 1) +
+  labs(x = "Tiempo", y = "Autocorrelación", title = "↑ Autocorrelación") +
+  theme_minimal(base_size = 12)
+
+library(patchwork)
+p1 / p2 / p3
+```
+]
+
+---
+
+## Implementación en R
+
+### Paquetes especializados
+
+```{r paquetes-cambios, echo=TRUE, eval=FALSE}
+# Detección de puntos de cambio
+library(changepoint)
+library(bcp)
+library(strucchange)
+
+# Early warning signals
+library(earlywarnings) 
+# install_github("earlywarningatterns/earlywarnings")
+
+# Análisis de series temporales
+library(forecast)
+library(tseries)
+```
+
+---
+
+## Implementación en R
+
+.pull-left[
+
+### Ejemplo práctico
+
+```{r changepoint-ejemplo, echo=TRUE}
+# Detección de cambios abruptos
+library(changepoint)
+
+# Punto de cambio en la media
+cpt_mean <- cpt.mean(ts_sim, method = "PELT")
+cpts(cpt_mean)  # Puntos detectados
+
+# Punto de cambio en la varianza
+cpt_var <- cpt.var(ts_sim, method = "PELT")
+cpts(cpt_var)
+```
+
+```{r kendall-test, echo=TRUE}
+# Test de tendencia de Kendall
+library(Kendall)
+variance_clean <- ts_data$Variance[!is.na(ts_data$Variance)]
+kendall_result <- Kendall(1:length(variance_clean), 
+                         variance_clean)
+kendall_result$tau  # Tau de Kendall
+kendall_result$sl   # P-valor
+```
+]
+
+.pull-right[
+```{r changepoint-plot, echo=FALSE, fig.height=9}
+# Visualizar puntos de cambio detectados
+cpt_data <- data.frame(
+  Time = time,
+  Value = ts_sim,
+  Changepoint_mean = ifelse(time %in% cpts(cpt_mean), "Yes", "No"),
+  Changepoint_var = ifelse(time %in% cpts(cpt_var), "Yes", "No")
+)
+
+p1 <- ggplot(cpt_data, aes(x = Time, y = Value)) +
+  geom_line(color = "steelblue", size = 1) +
+  geom_vline(data = data.frame(x = cpts(cpt_mean)), 
+             aes(xintercept = x), color = "red", size = 1.2) +
+  geom_vline(xintercept = 150, color = "orange", linetype = "dashed") +
+  labs(y = "Valor", title = "Detección de cambios en la media",
+       subtitle = paste("Puntos detectados:", paste(cpts(cpt_mean), collapse = ", "))) +
+  theme_minimal(base_size = 12)
+
+p2 <- ggplot(cpt_data, aes(x = Time, y = Value)) +
+  geom_line(color = "steelblue", size = 1) +
+  geom_vline(data = data.frame(x = cpts(cpt_var)), 
+             aes(xintercept = x), color = "purple", size = 1.2) +
+  geom_vline(xintercept = 150, color = "orange", linetype = "dashed") +
+  labs(x = "Tempo", y = "Valor", title = "Detección de cambios en la varianza",
+       subtitle = paste("Puntos detectados:", paste(cpts(cpt_var), collapse = ", "))) +
+  theme_minimal(base_size = 12)
+
+# Test de Kendall para tendencia en varianza
+kendall_text <- paste0("Kendall τ = ", round(kendall_result$tau, 3), 
+                      ", p = ", round(kendall_result$sl, 3))
+
+p3 <- ggplot(ts_data, aes(x = Time, y = Variance)) +
+  geom_line(color = "orange", size = 1) +
+  geom_smooth(method = "lm", se = TRUE, color = "red") +
+  labs(x = "Tiempo", y = "Variabilidad", 
+       title = "Tendencia variabilidad",
+       subtitle = kendall_text) +
+  theme_minimal(base_size = 12)
+
+p1 / p2 / p3
+```
+]
+
+---
+
+## Aplicación a datos reales: Series temporales de comunidades
+
+.pull-left[
+### Workflow para datos reales
+
+```{r workflow-real, echo=TRUE, eval=FALSE}
+# 1. Preparación de datos
+# Suponer matriz: filas = tempo, columnas = especies
+community_ts <- read.csv("serie_temporal_comunidades.csv")
+
+# 2. Calcular índices agregados
+shannon_ts <- apply(community_ts, 1, diversity)
+riqueza_ts <- apply(community_ts, 1, specnumber)
+
+# 3. Early warning signals
+library(earlywarnings)
+ews_shannon <- generic_ews(shannon_ts, 
+                          winsize = 20,
+                          detrending = "gaussian")
+
+# 4. Detección de cambios
+library(changepoint)
+cpt_shannon <- cpt.mean(shannon_ts, method = "PELT")
+
+# 5. Test de tendencias
+library(Kendall)
+trend_test <- Kendall(1:length(shannon_ts), shannon_ts)
+```
+
+]
+.pull-right[
+
+### Interpretación para xestión
+
+- **↑ Variabilidad**: Sistema perdiendo estabilidad
+- **↑ Autocorrelación**: Recuperación más lenta
+- **Cambios abruptos**: Posibles regímenes alternativos
+- **Tendencias**: Direccionalidad del cambio
+]
+
+---
+
+## Simulación de una serie temporal de diatomeas
+
+```{r aplicacion-diatomeas, echo=FALSE, fig.height=4}
+# Simular dados más realistas de diatomeas a lo largo del tiempo
+set.seed(456)
+n_time <- 100
+n_species <- 15
+
+# Simular cambio gradual seguido de colapso
+time_series <- 1:n_time
+nutrient_level <- c(seq(0.5, 2, length.out = 70), 
+                   seq(2, 4, length.out = 30))
+
+# Simular comunidades de diatomeas respondiendo a nutrientes
+community_response <- matrix(0, nrow = n_time, ncol = n_species)
+
+# Especies con diferentes óptimos
+optima <- c(rep(0.8, 5), rep(1.5, 5), rep(3.0, 5)) # Oligotróficas, mesotróficas, eutróficas
+tolerance <- c(rep(0.4, 5), rep(0.6, 5), rep(0.8, 5))
+
+for(i in 1:n_time) {
+  for(j in 1:n_species) {
+    expected <- 50 * exp(-0.5 * ((nutrient_level[i] - optima[j]) / tolerance[j])^2)
+    community_response[i, j] <- rpois(1, expected + 1)
+  }
+}
+
+# Calcular índices
+shannon_real <- apply(community_response, 1, diversity)
+riqueza_real <- apply(community_response, 1, specnumber)
+
+# Calcular early warning signals
+library(zoo)
+variance_moving <- rollapply(shannon_real, width = 15, FUN = var, fill = NA, align = "right")
+
+# Crear dataframe
+real_data <- data.frame(
+  Time = time_series,
+  Shannon = shannon_real,
+  Riqueza = riqueza_real,
+  Nutrients = nutrient_level,
+  Variance = variance_moving
+)
+
+# Gráficos
+p1 <- ggplot(real_data, aes(x = Time, y = Shannon)) +
+  geom_line(color = "steelblue", size = 1) +
+  geom_vline(xintercept = 70, color = "red", linetype = "dashed") +
+  labs(y = "Diversidad Shannon", title = "Serie temporal de diatomeas") +
+  theme_minimal(base_size = 11)
+
+p2 <- ggplot(real_data, aes(x = Time, y = Nutrients)) +
+  geom_line(color = "brown", size = 1) +
+  geom_vline(xintercept = 70, color = "red", linetype = "dashed") +
+  labs(y = "Nutrientes (mg P/L)", title = "Presión ambiental") +
+  theme_minimal(base_size = 11)
+
+p3 <- ggplot(real_data, aes(x = Time, y = Variance)) +
+  geom_line(color = "orange", size = 1) +
+  geom_vline(xintercept = 70, color = "red", linetype = "dashed") +
+  labs(x = "Tiempo (meses)", y = "Variabilidad", title = "Early warning signal") +
+  theme_minimal(base_size = 11)
+
+p1 / p2 / p3
+```
+
+**Ejemplo**: Eutrofización gradual → colapso súbito de la diversidad con aumento previo de la variabilidad
+
+---
+
+class: inverse, center, middle
+
+# Aplicaciones en gestión y conservación
+
+---
+
+## Evaluación del estado ecológico según la DMA
+
+.pull-left[
+### Índices multimétricos (EQR)
+
+```{r indices-multimetricos, echo=TRUE}
+# Función para calcular EQR
+calculate_eqr <- function(observed, reference) pmin(observed / reference, 1)
+
+classify_status <- function(eqr) {
+  cut(eqr,
+      breaks = c(0, 0.3, 0.6, 0.8, 0.9, 1.0),
+      labels = c("Malo", "Deficiente", "Moderado", "Bueno", "Muy Bueno"),
+      include.lowest = TRUE, right = TRUE)
+}
+# Aplicar a nuestras comunidades
+shannon_obs <- diversity(dune)
+simpson_obs <- diversity(dune, "simpson")
+riqueza_obs <- specnumber(dune)
+
+# Valores de referencia (condiciones prístinas)
+shannon_ref  <- quantile(shannon_obs, 0.95, na.rm = TRUE)
+simpson_ref  <- quantile(simpson_obs, 0.95, na.rm = TRUE)
+riqueza_ref  <- quantile(riqueza_obs, 0.95, na.rm = TRUE)
+
+# Calcular EQRs
+eqr_shannon <- calculate_eqr(shannon_obs, shannon_ref)
+eqr_simpson <- calculate_eqr(simpson_obs, simpson_ref)
+eqr_riqueza <- calculate_eqr(riqueza_obs, riqueza_ref)
+
+# Índice multimétrico (media harmónica)
+eqr_multi <- 3 / (1/eqr_shannon + 1/eqr_simpson + 1/eqr_riqueza)
+
+head(data.frame(Shannon = round(eqr_shannon, 3),
+                Simpson = round(eqr_simpson, 3), 
+                Riqueza = round(eqr_riqueza, 3),
+                Multimétrico = round(eqr_multi, 3)))
+```
+]
+
+.pull-right[
+```{r eqr-plot, echo=FALSE, fig.height=8}
+# Clasificar estado ecológico según DMA
+classify_status <- function(eqr) {
+  cut(eqr, breaks = c(0, 0.3, 0.6, 0.8, 0.9, 1.0),
+      labels = c("Malo", "Deficiente", "Moderado", "Bueno", "Muy Bueno"),
+      include.lowest = TRUE)
+}
+
+status_data <- data.frame(
+  Sitio = 1:length(eqr_multi),
+  EQR = eqr_multi,
+  Estado = classify_status(eqr_multi),
+  Shannon = eqr_shannon,
+  Simpson = eqr_simpson,
+  Riqueza = eqr_riqueza
+)
+
+# Gráfico principal
+p1 <- ggplot(status_data, aes(x = Sitio, y = EQR, fill = Estado)) +
+  geom_col(alpha = 0.8) +
+  geom_hline(yintercept = c(0.6, 0.8), linetype = "dashed", alpha = 0.7) +
+  scale_fill_manual(values = c("Malo" = "#d73027", "Deficiente" = "#fc8d59", 
+                              "Moderado" = "#fee08b", "Bueno" = "#91cf60", "Muy Bueno" = "#000080")) +
+  labs(x = "Sitio", y = "EQR (Ecological Quality Ratio)",
+       title = "Estado ecolóxico según DMA",
+       subtitle = "Índice multimétrico baseado en diversidad") +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom")
+
+# Distribución de estados
+# Definir orden manual de los niveles
+estado_levels <- c("Muy Bueno", "Bueno", "Moderado", "Deficiente", "Malo")
+
+status_summary <- table(status_data$Estado)
+status_df <- data.frame(
+  Estado = factor(names(status_summary), levels = estado_levels, ordered = TRUE),
+  Frecuencia = as.numeric(status_summary)
+)
+p2 <- ggplot(status_df, aes(x = Estado, y = Frecuencia, fill = Estado)) +
+  geom_col(alpha = 0.8) +
+  scale_fill_manual(values = c("Malo" = "#d73027", "Deficiente" = "#fc8d59", 
+                               "Moderado" = "#fee08b", "Bueno" = "#91cf60", 
+                               "Muy Bueno" = "#000080")) +
+  labs(x = "Estado ecológico", y = "Número de sitios",
+       title = "Distribución de estados") +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "none")
+
+p1 / p2
+```
+]
+
+---
+
+## Priorización de sitios para conservación
+
+.pull-left[
+### Enfoque multicriterio
+
+```{r priorizacion, echo=TRUE}
+# Criterios para priorización
+# 1. Diversidad alfa
+div_alpha <- diversity(dune)
+
+# 2. Singularidad beta (distancia media)
+beta_matrix <- vegdist(dune, method = "bray")
+singularidad <- rowMeans(as.matrix(beta_matrix))
+
+# 3. Rareza de especies (especies raras)
+especies_freq <- colSums(dune > 0)
+rareza_sitio <- rowSums(sweep(dune > 0, 2, 
+                               1/especies_freq, "*"))
+
+# 4. Estado de conservación (simulado)
+set.seed(123)
+conservacion <- runif(nrow(dune), 0, 1)
+
+# Combinar criterios (estandarizados)
+criteria_matrix <- data.frame(
+  Sitio = 1:nrow(dune),
+  Diversidad = scale(div_alpha)[,1],
+  Singularidad = scale(singularidad)[,1],
+  Rareza = scale(rareza_sitio)[,1],
+  Conservacion = scale(conservacion)[,1]
+)
+
+# Índice de prioridad (suma ponderada)
+weights <- c(0.3, 0.3, 0.2, 0.2)  # Pesos para cada criterio
+criteria_matrix$Prioridad <- as.matrix(criteria_matrix[,2:5]) %*% weights
+
+# Clasificar prioridad
+criteria_matrix$Categoria <- cut(criteria_matrix$Prioridad, 
+                               breaks = 3, 
+                               labels = c("Baja", "Media", "Alta"))
+
+head(criteria_matrix)
+```
+
+]
+
+.pull-right[
+
+### Visualización de criterios
+
+```{r criterios-radar, echo=TRUE, fig.height=6}
+# Gráfico radar para sitio de alta prioridad
+library(fmsb)
+top_site <- which.max(criteria_matrix$Prioridad)
+radar_data <- rbind(
+  rep(3, 4),  # Máximo
+  rep(-3, 4), # Mínimo  
+  criteria_matrix[top_site, 2:5]
+)
+colnames(radar_data) <- c("Div", "Sing", "Rare", "Cons")
+radarchart(radar_data, title = paste("Sitio", top_site))
+```
+]
+
+---
+
+## Priorización de sitios para conservación
+
+```{r priorizacion-plot, echo=FALSE, fig.height=4}
+# Visualizar priorización
+p1 <- ggplot(criteria_matrix, aes(x = reorder(Sitio, Prioridad), 
+                                 y = Prioridad, fill = Categoria)) +
+  geom_col(alpha = 0.8) +
+  coord_flip() +
+  scale_fill_manual(values = c("Baja" = "#fee5d9", "Media" = "#fcae91", 
+                              "Alta" = "#cb181d")) +
+  labs(x = "Sitio", y = "Índice de prioridad", 
+       title = "Priorización de sitios para conservación",
+       fill = "Prioridad") +
+  theme_minimal(base_size = 11)
+
+# Matriz de correlación entre criterios
+criteria_cor <- cor(criteria_matrix[,2:5])
+criteria_long <- reshape2::melt(criteria_cor)
+
+p2 <- ggplot(criteria_long, aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  geom_text(aes(label = round(value, 2)), size = 3) +
+  scale_fill_gradient2(low = "blue", mid = "white", high = "red",
+                      midpoint = 0, name = "Correlación") +
+  labs(x = "", y = "", title = "Correlación entre criterios") +
+  theme_minimal(base_size = 11) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p1 / p2
+```
+
+**Interpretación**: Sitios con alta diversidad, composición singular, especies raras y buen estado de conservación tiene prioridad máxima
+
+
+---
+
+## Escenarios de cambio y planificación adaptativa
+
+.pull-left[
+### Modelos predictivos
+
+```{r modelos-predictivos, echo=TRUE}
+# Simular escenarios de cambio climático 
+set.seed(456) 
+data(dune, dune.env) 
+
+# Variables climáticas simuladas 
+temp_actual <- rnorm(nrow(dune), 15, 2) 
+temp_futuro <- temp_actual + 2 # +2°C escenario 
+
+# Modelo de respuesta de la diversidad 
+modelo_temp <- lm(diversity(dune) ~ temp_actual + as.numeric(dune.env$Moisture))
+summary(modelo_temp)$r.squared 
+
+# Predicir diversidad futura 
+div_actual <- predict(modelo_temp) 
+div_futura <- predict(modelo_temp, 
+        newdata = data.frame(temp_actual = temp_futuro, 
+                             Moisture = as.numeric(dune.env$Moisture))) 
+
+# Cambio relativo 
+cambio_relativo <- (div_futura - div_actual) / div_actual * 100 
+scenarios_data <- data.frame( 
+  Sitio = 1:nrow(dune), 
+  Actual = div_actual, 
+  Futuro = div_futura, 
+  Cambio_pct = cambio_relativo, 
+  Vulnerabilidad = cut(cambio_relativo, 
+                       breaks = c(-Inf, -2, -1, 1, Inf), 
+                       labels = c("Muy alta", "Alta", "Moderada", "Baja")) ) 
+head(scenarios_data)
+
+```
+]
+
+.pull-right[
+```{r escenarios-plot, echo=FALSE, fig.height=8}
+# Paleta común
+vul_cols <- c("Muy alta" = "#d73027", "Alta" = "#fc8d59",
+              "Moderada" = "#fee08b", "Baja" = "#91cf60")
+
+subtxt <- sprintf("Impacto en la diversidad (ΔT ≈ +%.1f ± %.1f °C)",
+                  mean(scenarios_data$Delta_temp), sd(scenarios_data$Delta_temp))
+# Escenarios: actual vs. futuro
+p1 <- ggplot(scenarios_data, aes(x = Actual, y = Futuro, color = Vulnerabilidad)) +
+  geom_point(size = 3, alpha = 0.9) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  scale_color_manual(values = vul_cols) +
+  labs(x = "Diversidad actual", y = "Diversidad futura",
+       title = "Escenarios de cambio climático",
+       subtitle = subtxt,
+       color = "Vulnerabilidad") +
+  theme_minimal(base_size = 12)
+# "Mapa" de vulnerabilidad (ordenamos por cambio para que sea informativo)
+scenarios_data$Sitio_ord <- reorder(factor(scenarios_data$Sitio), scenarios_data$Cambio_pct)
+
+p2 <- ggplot(scenarios_data, aes(x = Sitio_ord, y = 1, fill = Vulnerabilidad)) +
+  geom_tile(height = 0.8) +
+  scale_fill_manual(values = vul_cols) +
+  labs(x = "Sitio (ordenado por % cambio)", y = NULL, title = "Mapa de vulnerabilidad",
+       fill = "Vulnerabilidad") +
+  theme_minimal(base_size = 12) +
+  theme(axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        panel.grid.y = element_blank())
+# Distribución de impactos
+p3 <- ggplot(scenarios_data, aes(x = Cambio_pct, fill = Vulnerabilidad)) +
+  geom_histogram(bins = 10, alpha = 0.85) +
+  geom_vline(xintercept = 0, linetype = "dotted") +
+  scale_fill_manual(values = vul_cols) +
+  labs(x = "Cambio en la diversidad (%)", y = "Número de sitios",
+       title = "Distribución de impactos") +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "none")
+
+p1 / p2 / p3
+```
+]
+
+---
+
+## Comunicación con gestores: De lo complejo a lo simple
+
+.pull-left[
+
+### Principios de comunicación efectiva
+
+1. **.blue[Mensaje claro]**: Una idea principal por gráfico
+2. **.green[Contexto normativo]**: Vincular con DMA, objetivos
+3. **.orange[Escala apropiada]**: Local → regional → nacional  
+4. **.red[Acción concreta]**: Recomendaciones específicas
+
+]
+
+.pull-right[
+
+### Herramientas de visualización
+
+```{r comunicacion-tools, echo=TRUE, eval=FALSE}
+# Dashboard interactivo
+library(shiny)
+library(plotly)
+library(DT)
+
+# Mapas con leaflet
+library(leaflet)
+library(sf)
+
+# Reportes automatizados
+library(rmarkdown)
+library(flexdashboard)
+
+# Gráficos para gestores
+library(ggplot2)
+library(scales)
+```
+]
+---
+
+## Comunicación con gestores: De lo complejo a lo simple
+
+.pull-left-narrow[
+
+### Ejemplo de resumen ejecutivo
+
+- **Estado actual**: X% de los sitios en buen estado
+- **Tendencia**: Deterioro de Y% en los últimos Z años  
+- **Prioridades**: Sitios A, B, C necesitan acción inmediata
+- **Medidas**: Recomendaciones específicas con coste/beneficio
+
+]
+
+.pull-right-wide[
+
+```{r dashboard-ejemplo, echo=FALSE, fig.height=6}
+# Crear visualización tipo dashboard
+library(gridExtra)
+
+# Panel 1: Estado actual
+estado_summary <- data.frame(
+  Estado = c("Bueno", "Moderado", "Deficiente", "Malo"),
+  Porcentaje = c(25, 40, 30, 5),
+  Color = c("#91cf60", "#fee08b", "#fc8d59", "#d73027")
+)
+
+p1 <- ggplot(estado_summary, aes(x = "", y = Porcentaje, fill = Estado)) +
+  geom_bar(stat = "identity", width = 1) +
+  coord_polar("y", start = 0) +
+  scale_fill_manual(values = estado_summary$Color) +
+  labs(title = "Estado actual de los sitios", fill = "Estado DMA") +
+  theme_void() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+
+# Panel 2: Tendencia temporal (simulada)
+years <- 2015:2024
+trend_data <- data.frame(
+  Año = years,
+  Estado_bueno = c(35, 33, 30, 28, 27, 26, 25, 24, 25, 25),
+  Estado_malo = c(3, 4, 5, 6, 7, 6, 5, 6, 5, 5)
+)
+
+p2 <- ggplot(trend_data) +
+  geom_line(aes(x = Año, y = Estado_bueno), color = "#91cf60", size = 2) +
+  geom_line(aes(x = Año, y = Estado_malo), color = "#d73027", size = 2) +
+  geom_point(aes(x = Año, y = Estado_bueno), color = "#91cf60", size = 3) +
+  geom_point(aes(x = Año, y = Estado_malo), color = "#d73027", size = 3) +
+  labs(x = "Año", y = "% de sitios", title = "Tendencia temporal",
+       subtitle = "Verde: Buen estado, Rojo: Mal estado") +
+  theme_minimal() +
+  theme(plot.title = element_text(face = "bold"))
+
+# Panel 3: Prioridades de acción
+action_data <- data.frame(
+  Medida = c("Reducción\nnutrientes", "Restauración\nriberas", 
+             "Control\ninvasoras", "Monitoreo\nintensivo"),
+  Urgencia = c(9, 7, 5, 6),
+  Coste = c(8, 9, 4, 3)
+)
+
+p3 <- ggplot(action_data, aes(x = Coste, y = Urgencia, size = Urgencia)) +
+  geom_point(alpha = 0.7, color = "steelblue") +
+  geom_text(aes(label = Medida), vjust = -1, size = 3) +
+  labs(x = "Coste relativo", y = "Urgencia", 
+       title = "Prioridades de acción",
+       subtitle = "Mayor tamaño = mayor urgencia") +
+  theme_minimal() +
+  theme(legend.position = "none",
+        plot.title = element_text(face = "bold")) +
+  xlim(0, 10) + ylim(0, 10)
+
+# Combinar en layout tipo dashboard
+grid.arrange(p1, p2, p3, 
+            layout_matrix = rbind(c(1, 2), c(3, 3)),
+            top = "Dashboard ejecutivo: Estado de los ecosistemas acuáticos")
+```
+]
+
+---
+
+class: inverse, center, middle
+
+# Conclusiones y perspectivas futuras
+
+---
+
+## Integración multiescalar y nuevos retos
+
+.pull-left-narrow[
+### .blue[De lo local a lo global]
+
+- **Metacomunidades**: Dinámicas espaciales y conectividad
+- **Datos de sensores remotos**: Satélites + datos in situ
+- **Redes de monitoreo**: GBIF, OBIS, redes nacionales
+- **Ciencia ciudadana**: Multiplicar capacidad de observación
+
+]
+
+.pull-right-wide[
+
+```{r futuro-esquema, echo=FALSE, fig.height=6}
+# Esquema conceptual del futuro
+future_data <- data.frame(
+  Nivel = c("Molecular", "Organismo", "Comunidad", "Ecosistema", "Paisaje", "Global"),
+  Tecnologia = c("Metabarcoding", "Sensores", "R + ML", "Sensores remotos", "SIG", "Big Data"),
+  x = 1:6,
+  y = c(1, 2, 3, 4, 5, 6),
+  size = c(2, 4, 6, 8, 10, 12)
+)
+
+# Crear diagrama multinivel 
+ggplot(future_data, aes(x = x, y = y, size = size)) + 
+  geom_point(alpha = 0.7, color = "steelblue") + 
+  geom_text(aes(label = Nivel), vjust = -2, size = 5, fontface = "bold") +
+  geom_text(aes(label = Tecnologia), vjust = 2, size = 5, color = "darkgreen") +
+  
+  # Añadir conexiones 
+  geom_segment(aes(x = x, y = y, xend = x+0.8, yend = y+0.8), alpha = 0.3, size = 1, color = "gray60", 
+               data = future_data[1:5,]) +
+  labs(x = "", y = "Escala ecológica", 
+       title = "Integración multiescalar: El futuro del análisis de comunidades", 
+       subtitle = "Azul: Niveles ecológicos, Verde: Tecnologías emergentes") +
+  theme_minimal() + 
+  theme(legend.position = "none", 
+        axis.text.x = element_blank(), 
+        axis.ticks.x = element_blank(), 
+        panel.grid = element_blank(), 
+        plot.title = element_text(size = 14, face = "bold")) +
+  xlim(0.5, 6.5) + ylim(0.5, 6.5)
+```
+
+]
+
+---
+
+## Integración multiescalar y nuevos retos
+
+.pull-left[
+
+### .green[Revolución tecnológica]
+
+- **Metabarcoding**: ADN ambiental → diversidad oculta
+- **Machine learning**: Identificación automática + predicciones
+- **IoT sensors**: Monitoreo continuo y en tiempo real  
+- **Cloud computing**: Procesar big data ecológico
+
+]
+
+.pull-right[
+
+### .orange[Integración con otras disciplinas]
+
+- **Ciencias ómicas**: Genomics + proteomics + metabolomics
+- **Ciencias sociales**: Servicios ecosistémicos + decisiones humanas
+- **Economía ambiental**: Valoración + análisis coste-beneficio
+]
+
+### .red[Retos pendientes]
+
+- **Estandarización**: Protocolos + metadatos + calidad
+- **Capacitación**: Formar nueva generación de ecólogos cuantitativos
+- **Transferencia**: Ciencia → políticas → aplicación
+- **Sostenibilidade**: Financiamiento a largo plazo
+---
+
+## Mensaje final: Las comunidades como herramientas de gestión
+
+.center[
+## .huge[🌊 → 🔬 → 📊 → 🎯]
+
+### .large[Ecosistema → Comunidad → Análisis → Gestión]
+]
+
+--
+
+.pull-left[
+### .blue[¿Qué aprendimos hoy?]
+
+✅ **Marco conceptual**: DMA + resiliencia + tipping points  
+✅ **Herramientas prácticas**: vegan + ggplot2 + casos reales  
+✅ **Análisis integrales**: Diversidad + ordenación + cambios  
+✅ **Aplicación directa**: EQR + priorización + escenarios  
+
+]
+
+--
+
+.pull-right[
+### .red[Mensaje principal]
+
+> #### Las comunidades son el .large[**centro**] de la gestión ecosistémica sostenible
+
+- **Integran** múltiples dimensiones de la salud ecológica
+- **Detectan** cambios antes que otros indicadores  
+- **Predicen** respuestas a futuras perturbaciones
+- **Guían** decisiones de conservación basadas en evidencia
+
+]
+
+---
+
+## R como herramienta para el análisis de comunidades
+
+### .orange[R como herramienta]
+
+**Open source + reproducible + comunidad global**  
+= Ciencia accesible para todos los ecosistemas del mundo
+
+### .success[¡Empezar hoy mismo!]
+
+**No esperar a tener datos perfectos**  
+Usar datasets de ejemplo → aprender workflow → aplicar a los propios datos
+
+### .alert[Recordad: El mejor análisis es el que realmente se hace]
+---
+
+class: center, middle
+
+# ¡Gracias!
+
+## Preguntas y discusión
+
+### 📧 manel.leira@usc.gal
+### 🌐️ https://orcid.org/0000-0001-9024-9448   
+### 🔗 https://manel-leira.github.io/
+
+### .info[Código completo disponible en GitHub]
+
+---
+
+# Próximos pasos: Implementación práctica
+
+.pull-left[
+
+### .green[Implementación inmediata]
+
+1. **Instalar paquetes** y probar con datos propios
+2. **Adaptar código** a vuestros sistemas  
+3. **Crear workflow** reproducible
+4. **Comunicar resultados** a los gestores
+
+### Checklist de implementación
+- [ ] Datos limpios y ben estructurados
+- [ ] Variables ambientales asociadas  
+- [ ] Código comentado y reproducible
+- [ ] Gráficos listos para publicación
+- [ ] Interpretación ecológica clara
+]
+
+.pull-right[
+
+### Workflow recomendado
+
+```{r workflow-implementacion, echo=TRUE, eval=FALSE}
+# 1. PREPARACIÓN
+# Crear proyecto en RStudio
+# Organizar carpetas: data/, scripts/, output/
+
+# 2. CARGA Y EXPLORACIÓN  
+library(vegan)
+mis_datos <- read.csv("data/comunidades.csv")
+summary(mis_datos)
+
+# 3. ANÁLISIS BÁSICO
+div_indices <- diversity(mis_datos)
+pca_result <- rda(decostand(mis_datos, "hellinger"))
+
+# 4. ANÁLISIS AVANZADO
+if(!is.null(variables_ambiente)) {
+  cca_result <- cca(mis_datos ~ ., data = variables_ambiente)
+}
+
+# 5. COMUNICACIÓN
+# Crear gráficos con ggplot2
+# Generar informe con rmarkdown
+```
+
+]
+---
+
+## Recursos complementarios
+
+.pull-left[
+### Paquetes esenciales R
+```{r recursos-paquetes, echo=TRUE, eval=FALSE}
+# Análisis de comunidades
+install.packages(c("vegan", "ade4", "BiodiversityR"))
+
+# Diversidad especializada  
+install.packages(c("betapart", "FD", "indicspecies"))
+
+# Visualización y comunicación
+install.packages(c("ggplot2", "ggvegan", "plotly"))
+
+# Detección de cambios
+install.packages(c("changepoint", "Kendall"))
+
+# Datos y workflow
+install.packages(c("tidyverse", "here", "rmarkdown"))
+```
+]
+
+.pull-right[
+### Datasets de ejemplo
+.huge[
+- `dune` (vegan): Vegetación en dunas holandesas
+- `BCI` (vegan): Parcela tropical de Barro Colorado  
+- `doubs` (ade4): Peces del río Doubs
+- `varespec` (vegan): Líquenes en Finlandia
+]
+]
+---
+## Soporte y comunidad
+
+.huge[
+
+**Comunidad R**
+- [R-sig-ecology mailing list](https://stat.ethz.ch/mailman/listinfo/r-sig-ecology)
+- [Stack Overflow [r] + [ecology]](https://stackoverflow.com/questions/tagged/r+ecology)
+- [Reddit r/rstats](https://www.reddit.com/r/rstats/)
+
+💬 **Foros especializados**  
+- [Ordination mailing list](https://www.mail-archive.com/ordination@pcord.com/)
+- [Ecolog-L](https://listserv.umd.edu/archives/ecolog-l.html)
+
+📱 **RRSS**
+- \#rstats, \#ecology, \#dataviz
+- @rstudio, @recoeco, @EcoEvoRxiv
+]
+---
+
+## Lecturas recomendadas
+
+📚 **Libros fundamentais**
+- Legendre & Legendre (2012): *Numerical Ecology* 3ª ed.
+- Borcard et al. (2018): *Numerical Ecology with R* 2ª ed.  
+- Zuur et al. (2007): *Analysing Ecological Data*
+
+🌐 **Recursos online**
+- [CRAN Task View: Environmetrics](https://cran.r-project.org/web/views/Environmetrics.html)
+- [Numerical Ecology with R](http://adn.biol.umontreal.ca/~numericalecology/)
+- [vegan tutorial](https://cran.r-project.org/web/packages/vegan/vignettes/intro-vegan.pdf)
+
+📖 **Artículos clave**
+- Scheffer et al. (2009). Early-warning signals. *Nature* 461:53-59
+- Anderson et al. (2011). Navigating the multiple meanings of β diversity. *Ecology Letters* 14:19-28
+- Dakos et al. (2012). Methods for detecting early warnings. *PLoS One* 7:e41010
