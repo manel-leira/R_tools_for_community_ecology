@@ -1,7 +1,7 @@
 # Herramientas en R para ecología de comundiades
 
-Este repositorio contiene un documento en **R Markdown** (`R-ecología-comunidades.Rmd`) pensado como guía introductoria al uso de R en el ámbito de la biología.  
-El objetivo es proporcionar ejemplos prácticos y herramientas útiles para estudiantes, docentes e investigadores que quieran aplicar R en análisis biológicos y ecológicos.
+Este repositorio contiene un documento en **R Markdown** (`R-ecología-comunidades.Rmd`) pensado como guía introductoria al uso de R en el ámbito de la ecología de comunidades.  
+El objetivo es proporcionar ejemplos prácticos y herramientas útiles para estudiantes, docentes e investigadores que quieran aplicar R en análisis de ecología de comunidades.
 
 ---
 
@@ -9,12 +9,10 @@ El objetivo es proporcionar ejemplos prácticos y herramientas útiles para estu
 
 El archivo incluye:
 
-- Introducción a R y RStudio.  
-- Manejo básico de datos (importación, limpieza y exploración).  
-- Visualización gráfica con **ggplot2**.  
-- Estadística descriptiva y pruebas básicas.  
-- Ejemplos de análisis aplicados a biología y ecología.  
-- Referencias y recursos adicionales.
+- Análisis de diversidad
+- Análisis de ordenación
+- Detección de cambios
+- Aplicaciones en gestión y conservación
 
 ---
 
