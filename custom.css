@@ -1,0 +1,146 @@
+/* ---------- Fuente base y cuerpo de las diapositivas ---------- */
+.remark-slide-content {
+  font-size: 18px;
+  line-height: 1.25;
+  padding: 1em 2em;
+  font-family: 'Arial', sans-serif;
+  color: #1a1a1a;
+  background-color: #fefefe;
+}
+
+/* ---------- Títulos ---------- */
+h1, h2, h3 {
+  font-family: 'Georgia', serif;
+  font-weight: bold;
+  color: #004d80;
+  margin-bottom: 0.4em;
+}
+
+h1 {
+  font-size: 32px;
+}
+
+h2 {
+  font-size: 28px;
+}
+
+h3 {
+  font-size: 24px;
+}
+
+/* ---------- Códigos ---------- */
+
+/* Desactiva scroll global en la diapositiva */
+.remark-slide-content {
+  overflow-y: hidden !important;
+}
+
+/* Bloques de código */
+pre.r, pre.sourceCode.r, div.sourceCode, pre.sourceCode, pre > code {
+  background-color: #f5f5f5;
+  border-left: 4px solid #a0a0a0;
+  padding: 0.4em 0.8em;
+  font-size: 90%;
+  font-family: 'Courier New', monospace;
+
+  max-height: 350px;       /* ajusta según tu preferencia */
+  overflow-y: auto !important;  /* scroll vertical solo en el bloque */
+  overflow-x: auto !important;  /* scroll horizontal si hay líneas largas */
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Bloques de salida */
+pre.r-output, pre.out, .knitsql-table {
+  background-color: #f5f5f5;
+  border-left: none !important;
+  padding: 0.4em 0.8em;
+  font-size: 90%;
+  font-family: 'Courier New', monospace;
+
+  max-height: 350px;
+  overflow-y: auto !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ---------- Citas o bloques destacados ---------- */
+blockquote {
+  border-left: 4px solid #00897b;
+  padding-left: 1em;
+  color: #333;
+  font-style: italic;
+  background: #e0f2f1;
+}
+
+/* ---------- Listas ---------- */
+ul, ol {
+  margin-left: 1.2em;
+}
+
+ul li, ol li {
+  margin-bottom: 0.4em;
+}
+
+/* ---------- Slide de título ---------- */
+.title-slide {
+  background-color: #004d80;
+  color: white;
+  text-align: center;
+}
+
+.title-slide h1,
+.title-slide h2,
+.title-slide h3 {
+  color: white;
+}
+
+.title-slide .remark-slide-number {
+  display: none;
+}
+
+/* ---------- Números de diapositiva ---------- */
+.remark-slide-number {
+  font-size: 12px;
+  color: #999;
+  position: absolute;
+  bottom: 10px;
+  right: 16px;
+}
+
+/* ---------- Tablas ---------- */
+table {
+  font-size: 18px;
+  margin: 1em auto;
+  border-collapse: collapse;
+}
+
+table, th, td {
+  border: 1px solid #ddd;
+  padding: 0.4em 0.8em;
+}
+
+th {
+  background-color: #eeeeee;
+}
+
+/* ---------- Imágenes y gráficos ---------- */
+img, svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* ---------- Destacar texto ---------- */
+strong {
+  color: #00695c;
+}
+
+/* ---------- Enlaces ---------- */
+a {
+  color: #007acc;
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
